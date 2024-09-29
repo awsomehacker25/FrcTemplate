@@ -47,6 +47,12 @@ public class FrcTeleOp implements TrcRobot.RobotMode
     protected boolean driverAltFunc = false;
     protected boolean operatorAltFunc = false;
     private boolean subsystemStatusOn = true;
+    private boolean shooterOn = false;
+    private double prevSimpleMotorPower = 0.0;
+    private double prevSimpleServoPower = 0.0;
+    private double prevElevatorPower = 0.0;
+    private double prevArmPower = 0.0;
+    private double prevShooterVelocity = 0.0;
 
     /**
      * Constructor: Create an instance of the object.
@@ -193,6 +199,88 @@ public class FrcTeleOp implements TrcRobot.RobotMode
                 //
                 if (RobotParams.Preferences.useSubsystems)
                 {
+                    if (robot.simpleMotor != null)
+                    {
+                        double motorPower = robot.driverController.getLeftYWithDeadband(true);
+                        if (motorPower != prevSimpleMotorPower) 
+                        {
+                            robot.simpleMotor.setPower(motorPower);
+                            prevSimpleMotorPower = motorPower;
+                            // robot.dashboard.displayPrintf(
+                            //     lineNum++, "Aaryaman's Motor: joystick=%.3f, power=%.3f, enc=%.0f",
+                            //     motorPower, robot.simpleMotor.getPower());
+                        }
+                    }
+
+                    if (robot.simpleServo != null)
+                    {
+                        double servoPower = robot.driverController.getRightYWithDeadband(true);
+                        if (servoPower != prevSimpleServoPower) 
+                        {
+                            robot.simpleServo.setPower(servoPower);
+                            prevSimpleServoPower = servoPower;
+                            // robot.dashboard.displayPrintf(
+                            //     lineNum++, "Aaryaman's Servo: power=%.3f, pos=%.3f",
+                            //     servoPower, robot.simpleServo.getPosition());
+                        }
+                    }
+
+                    if (robot.elevator != null)
+                    {
+                        double elevatorPower = robot.driverController.getLeftYWithDeadband(true);
+                        if (elevatorPower != prevElevatorPower)
+                        {
+                            if (driverAltFunc)
+                            {
+                                robot.elevator.setPower(elevatorPower);
+                            }
+                            else
+                            {
+                                robot.elevator.setPidPower(elevatorPower, RobotParams.Elevator.MIN_POS, 
+                                RobotParams.Elevator.MAX_POS, true);
+                            }
+                            prevElevatorPower = elevatorPower;
+                        }
+                    }
+
+                    if (robot.arm != null)
+                    {
+                        double armPower = robot.driverController.getLeftYWithDeadband(true);
+                        if (armPower != prevArmPower)
+                        {
+                            if (driverAltFunc)
+                            {
+                                robot.elevator.setPower(armPower);
+                            }
+                            else
+                            {
+                                robot.elevator.setPidPower(armPower, RobotParams.Arm.MIN_POS, 
+                                RobotParams.Arm.MAX_POS, true);
+                            }
+                            prevArmPower = armPower;
+                        }
+                    }
+
+                    if (robot.shooter != null)
+                    {
+                        if (shooterOn)
+                        {
+                            double shooterVel = robot.shooterVelocity.getValue();
+                            if (shooterVel != prevShooterVelocity)
+                            {
+                                robot.shooter.setShooterMotorRPM(shooterVel, shooterVel);
+                                prevShooterVelocity = shooterVel;
+                            }
+                        }
+                        else
+                        {
+                            if (prevShooterVelocity != 0.0)
+                            {
+                                robot.shooter.stopShooter();
+                                prevShooterVelocity = 0.0;
+                            }
+                        }
+                    }
                 }
             }
             //
@@ -288,7 +376,31 @@ public class FrcTeleOp implements TrcRobot.RobotMode
                 break;
 
             case BUTTON_X:
+                if (robot.simpleServo != null)
+                {
+                    if(pressed)
+                    {
+                        robot.simpleServo.setPosition(90.0);
+                    }
+                    else
+                    {
+                        robot.simpleServo.setPosition(0.0);
+                    }
+                }
+                else if (robot.shooter != null)
+                {
+                    if (pressed)
+                    {
+                        shooterOn = !shooterOn;
+                    }
+                }
+                break;
+
             case BUTTON_Y:
+                if (pressed)
+                {
+                    robot.zeroCalibrate();
+                }
                 break;
 
             case LEFT_BUMPER:
@@ -309,9 +421,71 @@ public class FrcTeleOp implements TrcRobot.RobotMode
                 break;
 
             case DPAD_UP:
+                if (robot.elevator != null)
+                {
+                    if (pressed)
+                    {
+                        robot.elevator.presetPositionUp(null, RobotParams.Elevator.POWER_LIMIT);
+                    }
+                }
+                else if (robot.arm != null)
+                {
+                    if (pressed)
+                    {
+                        robot.arm.presetPositionUp(null, RobotParams.Arm.POWER_LIMIT);
+                    }
+                }
+                else if (robot.shooter != null)
+                {
+                    if (pressed)
+                    {
+                        robot.shooterVelocity.upValue();
+                    }
+                }
+                break;
+
             case DPAD_DOWN:
+                if (robot.elevator != null)
+                {
+                    if (pressed)
+                    {
+                        robot.elevator.presetPositionDown(null, RobotParams.Elevator.POWER_LIMIT);
+                    }
+                }
+                else if (robot.arm != null)
+                {
+                    if (pressed)
+                    {
+                        robot.arm.presetPositionDown(null, RobotParams.Arm.POWER_LIMIT);
+                    }
+                }
+                else if (robot.shooter != null)
+                {
+                    if (pressed)
+                    {
+                        robot.shooterVelocity.downValue();
+                    }
+                }
+                break;
+
             case DPAD_LEFT:
+                if (robot.shooter != null)
+                {
+                    if (pressed)
+                    {
+                        robot.shooterVelocity.downIncrement();
+                    }
+                }
+                break;
+            
             case DPAD_RIGHT:
+                if (robot.shooter != null)
+                {
+                    if (pressed)
+                    {
+                        robot.shooterVelocity.upIncrement();
+                    }
+                }
                 break;
 
             case BACK:

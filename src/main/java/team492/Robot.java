@@ -34,6 +34,8 @@ import frclib.driverio.FrcDashboard;
 import frclib.driverio.FrcJoystick;
 import frclib.driverio.FrcMatchInfo;
 import frclib.driverio.FrcXboxController;
+import frclib.motor.FrcCANTalonSRX;
+import frclib.motor.FrcServo;
 import frclib.robotcore.FrcRobotBase;
 import frclib.sensor.FrcPdp;
 import frclib.sensor.FrcRobotBattery;
@@ -41,17 +43,23 @@ import frclib.vision.FrcPhotonVision;
 import frclib.vision.FrcPhotonVisionRaw;
 import team492.drivebases.RobotDrive;
 import team492.drivebases.SwerveDrive;
+import team492.subsystems.Arm;
+import team492.subsystems.Elevator;
 import team492.subsystems.LEDIndicator;
+import team492.subsystems.Shooter;
 import team492.vision.OpenCvVision;
 import team492.vision.PhotonVision;
 import team492.vision.PhotonVisionRaw;
+import trclib.dataprocessor.TrcDiscreteValue;
 import trclib.dataprocessor.TrcUtil;
 import trclib.drivebase.TrcDriveBase.DriveOrientation;
+import trclib.motor.TrcMotor;
 import trclib.pathdrive.TrcPose2D;
 import trclib.robotcore.TrcDbgTrace;
 import trclib.robotcore.TrcPidController;
 import trclib.robotcore.TrcRobot.RunMode;
 import trclib.sensor.TrcRobotBattery;
+import trclib.subsystem.TrcShooter;
 import trclib.timer.TrcTimer;
 import trclib.vision.TrcOpenCvDetector;
 import trclib.vision.TrcVisionTargetInfo;
@@ -109,7 +117,12 @@ public class Robot extends FrcRobotBase
     //
     // Other subsystems.
     //
-
+    public FrcCANTalonSRX simpleMotor;
+    public FrcServo simpleServo;
+    public TrcMotor elevator;
+    public TrcMotor arm;
+    public TrcShooter shooter;
+    public TrcDiscreteValue shooterVelocity;
     //
     // Auto-Assists.
     //
@@ -245,6 +258,48 @@ public class Robot extends FrcRobotBase
         //
         if (RobotParams.Preferences.useSubsystems)
         {
+            if (RobotParams.Preferences.useSimpleMotor)
+            {
+                simpleMotor = new FrcCANTalonSRX("SimpleMotor", 10);
+                simpleMotor.resetFactoryDefault();
+                simpleMotor.setVoltageCompensationEnabled(TrcUtil.BATTERY_NOMINAL_VOLTAGE);
+                simpleMotor.setBrakeModeEnabled(true);
+                simpleMotor.setMotorInverted(true);
+            }
+
+            if (RobotParams.Preferences.useSimpleServo)
+            {
+                simpleServo = new FrcServo("SimpleServo", 0);
+                simpleServo.setLogicalPosRange(0.2, 0.6);
+                simpleServo.setPhysicalPosRange(0.0, 90.0);
+                simpleServo.setMaxStepRate(250.0);
+                simpleServo.setPosition(0.0); // in degrees
+                // simpleServoFollower = new FrcServo("FollowerServo", 1);
+                // simpleServoFollower.setInverted(true);
+                // simpleServoFollower.setLogicalPosRange();
+                // simpleServoFollower.setPhysicalPosRange();
+                // simpleServoFollower.follow(simpleServo);
+            }
+
+            if (RobotParams.Preferences.useElevator)
+            {
+                elevator = new Elevator().getElevatorMotor();
+            }
+
+            if (RobotParams.Preferences.useArm)
+            {
+                arm = new Arm().getArmMotor();
+            }
+
+            if (RobotParams.Preferences.useShooter)
+            {
+                shooter = new Shooter().getShooter();
+                shooterVelocity = new TrcDiscreteValue(
+                    RobotParams.Shooter.SUBSYSTEM_NAME + ".motorVel", 
+                    RobotParams.Shooter.SHOOTER_MIN_VEL, RobotParams.Shooter.SHOOTER_MAX_VEL, 
+                    RobotParams.Shooter.SHOOTER_MIN_VEL_INC, RobotParams.Shooter.SHOOTER_MAX_VEL_INC, 
+                    RobotParams.Shooter.SHOOTER_DEF_VEL, RobotParams.Shooter.SHOOTER_DEF_VEL_INC);
+            }
         }
         //
         // Miscellaneous.
@@ -535,6 +590,51 @@ public class Robot extends FrcRobotBase
 
             if (RobotParams.Preferences.showSubsystems)
             {
+                if (simpleMotor != null)
+                {
+                    dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Motor: joystick=%.3f, power=%.3f, enc=%.0f",
+                            simpleMotor.getPower(), simpleMotor.getPower());
+                }
+
+                if (simpleServo != null)
+                {
+                    dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Servo: power=%.3f, pos=%.3f",
+                            simpleServo.getPower(), simpleServo.getPosition());
+                }
+
+                if (elevator != null)
+                {
+                    dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Elevator: power=%.3f, pos=%.3f/%.3f, limitSw=%s/%s",
+                            elevator.getPower(), elevator.getPosition(), elevator.getPidTarget(),
+                            elevator.isLowerLimitSwitchActive(), elevator.isUpperLimitSwitchActive());
+                }
+
+                if (arm != null)
+                {
+                    dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Arm: power=%.3f, pos=%.3f/%.3f, limitSw=%s/%s",
+                            arm.getPower(), arm.getPosition(), arm.getPidTarget(),
+                            arm.isLowerLimitSwitchActive(), arm.isUpperLimitSwitchActive());
+                }
+
+                if (shooter != null)
+                {
+                    dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Shooter1: power=%.3f, vel=%.3f, target=%.3f",
+                            shooter.getShooterMotor1Power(), shooter.getShooterMotor1RPM(), 
+                            shooter.getShooterMotor1TargetRPM());
+                    TrcMotor motor2 = shooter.getShooterMotor2();
+                    if (motor2 != null)
+                    {
+                        dashboard.displayPrintf(
+                            lineNum++, "Aaryaman's Shooter2: power=%.3f, vel=%.3f, target=%.3f",
+                            motor2.getPower(), shooter.getShooterMotor2RPM(), 
+                            shooter.getShooterMotor2TargetRPM());
+                    }
+                }
             }
         }
     }   //updateStatus
@@ -613,6 +713,10 @@ public class Robot extends FrcRobotBase
      */
     public void zeroCalibrate()
     {
+        if (elevator != null)
+        {
+            elevator.zeroCalibrate("ZeroCal", RobotParams.Elevator.ZERO_CAL_POWER);
+        }
     }   //zeroCalibrate
 
     /**
